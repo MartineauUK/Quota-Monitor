@@ -1,6 +1,6 @@
 #!/bin/sh
-VER="v1.06"
-#======================================================================================= © 2018-2020 Martineau v1.06
+VER="v1.07"
+#======================================================================================= © 2018-2021 Martineau v1.07
 #
 # Monitor device traffic quotas and apply block if limit exceeded (Alternative to Traffic Analyzer i.e. eliminates need to accept TrendMicro's EULA)
 #
@@ -270,6 +270,78 @@ Hostname_from_IP () {
             HOSTNAMES=$HOSTNAMES" "$HOSTNAME
         done
     echo $HOSTNAMES
+}
+# v1.07 Add referenced (but undefined) function
+ExpandIPRange() {
+
+    # '192.168.1.30 192.168.1.50-192.168.1.54' -> '192.168.1.30 192.168.1.50 192.168.1.51 192.168.1.52 192.168.1.53 192.168.1.54'
+
+    local HOST_NAME=0                                   # Hostname found/returned
+    local IP_LIST=
+    local START_RANGE=
+    local END_RANGE=
+    local NUM=
+    local MAX=
+
+    local LANIPADDR=`nvram get lan_ipaddr`
+    local LAN_PREFIX=${LANIPADDR%.*}                    # 1.2.3.99 -> 1.2.3
+
+    for THIS in $@
+        do
+
+            if [ -n "$(echo "$THIS" | grep -E "^#")" ];then
+                break               # Ignore comment
+            fi
+
+            # If any alphabetic characters then assume it is a name e.g. LIFX-Table_light
+            if [ -z "$(echo $THIS | grep "[A-Za-z]")" ];then
+
+                if [ -n "$(echo $THIS | grep "-")" ];then
+
+                    Parse $THIS "-" START_RANGE END_RANGE               # 1.2.3.90-1.2.3.99 -> 1.2.3.90 1.2.3.99
+                    local START_PREFIX=${START_RANGE%.*}                # 1.2.3.90 -> 1.2.3
+                    local END_PREFIX=${END_RANGE%.*}                    # 1.2.3.99 -> 1.2.3
+
+                    if [ "$START_PREFIX" != "$END_PREFIX" ];then        # Restrict range of devices to 254
+                        Say "***ERROR*** invalid IP range" $THIS
+                        echo ""
+                        return 100
+                    fi
+
+                    NUM=${START_RANGE##*.}                              # Extract 4th octet 1.2.3.90 -> 90
+                    MAX=${END_RANGE##*.}                                # Extract 4th octet 1.2.3.99 -> 99
+                    while [ $NUM -le $MAX ]
+                        do
+                            IP_LIST=$IP_LIST" "$START_PREFIX"."$NUM
+                            NUM=$(($NUM+1))
+                        done
+                else
+                    local THIS_PREFIX=${THIS%.*}
+                    if [ "$THIS_PREFIX" != "$LAN_PREFIX" ];then
+                        Say "***ERROR '"$THIS"' is not on this LAN '"$LAN_PREFIX".0/24'"
+                        echo ""
+                        return 200
+                    else
+                        IP_LIST=$IP_LIST" "$THIS                        # Add to list
+                    fi
+                fi
+            else
+                # Let the caller ultimately decide if non-IP is valid!!!
+                #Say  "**Warning non-IP" $THIS
+                IP_LIST=$IP_LIST" "$THIS                                # Add to list
+                HOST_NAME=1
+            fi
+
+            shift 1
+        done
+
+    echo $IP_LIST
+
+    if [ $HOST_NAME -eq 1 ];then
+        return 300
+    else
+        return 0
+    fi
 }
 Get_Current_Bytes() {
     echo $(iptables --line -nvxL $2 | grep -v "Block" | grep -E "${1}[[:space:]]" | awk '{print $3}')       # Add [[:space:]] v1.05
