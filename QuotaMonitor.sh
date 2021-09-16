@@ -1,6 +1,6 @@
 #!/bin/sh
-VER="v1.07"
-#======================================================================================= © 2018-2021 Martineau v1.07
+VER="v1.08"
+#======================================================================================= © 2018-2021 Martineau v1.08
 #
 # Monitor device traffic quotas and apply block if limit exceeded (Alternative to Traffic Analyzer i.e. eliminates need to accept TrendMicro's EULA)
 #
@@ -705,7 +705,13 @@ Monitor_Client(){
                             fi
                         fi
 
-                        eval "${VHOSTNAME}_IP=$(Convert_TO_IP ${HOSTNAME})"
+						if [ -z "$(echo "$HOSTNAME" | grep -E "^noname_")" ];then	# v1.08
+							eval "${VHOSTNAME}_IP=$(Convert_TO_IP ${HOSTNAME})"
+						else
+							local OCTET4="$(echo "$HOSTNAME" | sed 's/^noname_//')"	# v1.08
+							eval "${VHOSTNAME}_IP=${LAN_SUBNET_PREFIX}.${OCTET4}"	# v1.08
+						fi
+
                         eval "${VHOSTNAME}_BYTES_RECV=$(Get_Current_Bytes $HOSTNAME $TABLE_IN)"     # Current bytes count from iptables
                         eval "${VHOSTNAME}_BYTES_XMIT=$(Get_Current_Bytes $HOSTNAME $TABLE_OUT)"    # Current bytes count from iptables
                         eval "${VHOSTNAME}_BLOCKED="                                                # Timestamp when it was blocked in Epoch seconds
@@ -1009,9 +1015,11 @@ Monitor_Client(){
                         local HOSTNAME=${HOSTNAME%%.*}                      # Strip domain
 
                         if [ -z "$HOSTNAME" ];then                          # v1.03 'ip=auto' can return blank hostname  ???
-                            STATUS=1
-                            LAN_IPS=$IP                                     # Report bad boy
-                            break
+							local OCTET4=${IP##*.}							# v1.08
+							HOSTNAME="noname_"$OCTET4							# v1.08
+                            #STATUS=1										# v1.08
+                            #LAN_IPS=$IP                                    # v1.08 Report bad boy
+                            #break											# v1.08
                         fi
 
                         case $ACTION in
@@ -1224,6 +1232,9 @@ IP_CNT=0
 OPTTXT=
 
 WAN_IF=$(Get_WAN_IF_Name)
+
+LAN_IPADDR=$(nvram get lan_ipaddr)			# v1.08
+LAN_SUBNET_PREFIX=${LAN_IPADDR%.*}			# v1.08
 
 while [ $# -gt 0 ]; do    # Until you run out of parameters . . .
     case $1 in
